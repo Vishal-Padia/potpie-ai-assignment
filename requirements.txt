@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+celery
+redis
+sqlalchemy
+psycopg2-binary
+transformers
+torch
+python-dotenv
+pygithub
+pydantic
+python-jose
+passlib
+pytest
+httpx
