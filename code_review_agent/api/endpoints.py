@@ -1,9 +1,11 @@
 import os
 from huggingface_hub import login
+from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
 from code_review_agent.github.client import GitHubClient
 from code_review_agent.agents.workflow import CodeReviewWorkflow
 from code_review_agent.utils.logging import setup_logging
+from code_review_agent.celery_app.tasks import review_pr_task
 
 # Initialize logging
 setup_logging()
@@ -37,10 +39,32 @@ def read_root():
 def review_pr(username: str, repo: str, pr_number: int):
     repo_name = f"{username}/{repo}"
     try:
-        # Fetch and parse the diff
-        parsed_diff = github_client.get_parsed_diff(repo_name, pr_number)
-        # Run the workflow with the parsed diff
-        result = review_workflow.run(parsed_diff)
-        return result  # Return the feedback
+        # Trigger the Celery task
+        task = review_pr_task.delay(repo_name, pr_number)
+        return {"task_id": task.id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/status/{task_id}")
+def get_task_status(task_id: str):
+    """
+    Check the status of a Celery task.
+    """
+    task_result = AsyncResult(task_id)
+    return {
+        "task_id": task_id,
+        "status": task_result.status,
+    }
+
+
+@app.get("/results/{task_id}")
+def get_task_result(task_id: str):
+    """
+    Get the result for the task id
+    """
+    task_result = AsyncResult(task_id)
+    return {
+        "task_id": task_id,
+        "result": task_result.result if task_result.ready() else None,
+    }
